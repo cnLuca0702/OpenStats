@@ -65,6 +65,8 @@ public struct GostPort: Sendable, Equatable, Identifiable {
     public let port: Int
     public var probe: GostProbeState
     public var probedAt: Date?
+    /// 最近约 1 小时的探测延迟（毫秒），探测失败的那次为 nil；走势图用
+    public var latencyHistory: [Double?] = []
 
     init(pid: Int32, address: String, port: Int, probe: GostProbeState = .pending, probedAt: Date? = nil) {
         self.pid = pid
@@ -167,6 +169,11 @@ public actor GostSampler {
         guard let index = ports.firstIndex(where: { $0.id == key }) else { return }
         ports[index].probe = state
         ports[index].probedAt = now
+        // 保留约 1 小时（每 10 秒一条）供走势图使用
+        ports[index].latencyHistory.append(state.milliseconds)
+        if ports[index].latencyHistory.count > 360 {
+            ports[index].latencyHistory.removeFirst(ports[index].latencyHistory.count - 360)
+        }
     }
 
     // MARK: 进程
