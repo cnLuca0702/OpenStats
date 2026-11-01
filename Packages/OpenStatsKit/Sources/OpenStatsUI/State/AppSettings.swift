@@ -91,7 +91,7 @@ public enum MenuBarItem: String, CaseIterable, Identifiable, Sendable {
         case .temperature: "thermometer.medium"
         case .fan: "fan"
         case .battery: "battery.75"
-        case .gost: "point.3.connected.trianglepath"
+        case .gost: "point.3.connected.trianglepath.dotted"
         }
     }
 }
@@ -342,7 +342,7 @@ public enum PanelTab: String, CaseIterable, Identifiable, Sendable {
         case .network: "network"
         case .thermal: "fan"
         case .battery: "battery.75"
-        case .gost: "point.3.connected.trianglepath"
+        case .gost: "point.3.connected.trianglepath.dotted"
         case .processes: "list.bullet.rectangle"
         case .keepAwake: "cup.and.saucer"
         case .cleaner: "sparkles"
