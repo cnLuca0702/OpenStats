@@ -23,6 +23,10 @@ struct MenuBarReading {
     /// 附在电池项旁的蓝牙设备：电量低的那一个，或没有电池的 Mac 上电量最低的那一个
     var bluetoothDevice: (symbol: String, percent: Int)?
     var keepAwake = false
+    /// gost 代理：可用端口数 / 总端口数；nil 表示没有读数
+    var gostPorts: (up: Int, total: Int)?
+    var gostLatencyMs: Double?
+    var gostRunning = false
 
     /// 蓝牙设备电量低于这个百分比才在菜单栏提示
     static let lowBluetoothPercent = 20
@@ -50,6 +54,11 @@ struct MenuBarReading {
             bluetoothDevice = (lowest.device.kind.symbol, lowest.percent)
         }
         keepAwake = model.keepAwake.isActive
+        if let gost = store.gost {
+            gostRunning = gost.isRunning
+            gostPorts = gost.ports.isEmpty ? nil : (gost.healthyPortCount, gost.ports.count)
+            gostLatencyMs = gost.bestLatency
+        }
     }
 
     init() {}
@@ -75,6 +84,9 @@ struct MenuBarReading {
         reading.fanRPM = 1840
         reading.battery = 0.82
         reading.batteryHistory = Array(repeating: 0.82, count: 30)
+        reading.gostRunning = true
+        reading.gostPorts = (2, 2)
+        reading.gostLatencyMs = 86
         return reading
     }()
 
@@ -104,9 +116,18 @@ struct MenuBarReading {
             case .battery:
                 battery.map { tr("电池 \(Format.percent($0))") + (batteryCharging ? tr("，充电中") : "") }
                     ?? bluetoothDevice.map { tr("蓝牙设备电量 \($0.percent)%") }
+            case .gost: gostTooltip()
             }
         }
         .joined(separator: "\n")
+    }
+
+    /// Gost 悬停读数：未运行 / 端口可用数 / 查找中
+    private func gostTooltip() -> String? {
+        if !gostRunning { return tr("Gost 未运行") }
+        guard let ports = gostPorts else { return tr("Gost 正在查找端口…") }
+        let base = tr("Gost \(ports.up)/\(ports.total) 个端口可用")
+        return gostLatencyMs.map { base + tr(" · 延迟 \(Int($0.rounded())) ms") } ?? base
     }
 }
 
@@ -230,6 +251,20 @@ enum MenuBarRenderer {
             return textSegment(item: item, value: text, sample: "100°", style: style)
         case .fan:
             return textSegment(item: item, value: reading.fanRPM.map { "\(Int($0))" } ?? "—", sample: "8888", style: style)
+        case .gost:
+            // 有端口时显示 可用/总数；进程在但端口还没发现时用省略号占位
+            let value: String
+            if let ports = reading.gostPorts {
+                value = "\(ports.up)/\(ports.total)"
+            } else if reading.gostRunning {
+                value = "…"
+            } else {
+                value = "—"
+            }
+            let degraded = reading.gostRunning && (reading.gostPorts.map { $0.up < $0.total } ?? false)
+            let down = !reading.gostRunning
+            return textSegment(item: item, value: value, sample: "8/8", style: style,
+                               alert: colorizeHighLoad && (degraded || down))
         case .battery:
             return batterySegment(reading: reading, style: style, colorizeHighLoad: colorizeHighLoad)
         }
@@ -316,12 +351,12 @@ enum MenuBarRenderer {
         }
     }
 
-    /// 温度、风扇没有百分比图形：两行风格用标签 + 数值，单行风格与图标风格保持单行
-    private static func textSegment(item: MenuBarItem, value: String, sample: String, style: MenuBarStyle) -> Segment {
+    /// 温度、风扇、Gost 没有百分比图形：两行风格用标签 + 数值，单行风格与图标风格保持单行
+    private static func textSegment(item: MenuBarItem, value: String, sample: String, style: MenuBarStyle, alert: Bool = false) -> Segment {
         switch style {
-        case .inline: inlineText(label: item.menuBarLabel, value: value, sample: sample, alert: false)
-        case .icon: combine([symbolSegment(item.symbol), inlineValue(value, sample: sample, alert: false)])
-        default: stackedText(label: item.menuBarLabel, value: value, sample: sample, alert: false,
+        case .inline: inlineText(label: item.menuBarLabel, value: value, sample: sample, alert: alert)
+        case .icon: combine([symbolSegment(item.symbol), inlineValue(value, sample: sample, alert: alert)])
+        default: stackedText(label: item.menuBarLabel, value: value, sample: sample, alert: alert,
                              centered: style == .stackedCenter)
         }
     }

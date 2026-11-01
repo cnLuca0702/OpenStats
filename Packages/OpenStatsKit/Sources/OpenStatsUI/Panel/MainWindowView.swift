@@ -77,6 +77,7 @@ public struct MainWindowView: View {
                 }
             case .thermal: ThermalPage()
             case .battery: DetailPage { BatteryPopover() }
+            case .gost: DetailPage { GostPopover() }
             case .processes: ProcessesPage()
             case .keepAwake: KeepAwakePage()
             case .cleaner: CleanerPage()

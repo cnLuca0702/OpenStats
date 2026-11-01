@@ -62,6 +62,7 @@ public final class MetricsStore {
     public private(set) var diskReadHistory = History<Double>(capacity: historyCapacity)
     public private(set) var diskWriteHistory = History<Double>(capacity: historyCapacity)
     public private(set) var diskHealth: DiskHealth?
+    public private(set) var gost: GostStatus?
     public private(set) var lastUpdate: Date?
 
     public init() {}
@@ -121,6 +122,7 @@ public final class MetricsStore {
             diskWriteAverage.update(writes)
         }
         if let counts = snapshot.systemCounts { systemCounts = counts }
+        if let gost = snapshot.gost { self.gost = gost }
         if let sensors = snapshot.sensors {
             mergeSensors(sensors)
             // 只记常规采样，切换档位时的快速读数不进历史，保证曲线的时间间隔一致

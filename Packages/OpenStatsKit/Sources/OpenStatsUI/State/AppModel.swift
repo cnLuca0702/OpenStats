@@ -125,6 +125,8 @@ public final class AppModel {
         demand.cpuFrequency = showing(.cpu, .cpu)
         demand.fans = overview || (window && tab == .thermal) || menu.contains(.fan)
             || fans.mode != .automatic || thermalPopover
+        // Gost 只在有它的菜单栏项或详情打开时采
+        demand.gost = menu.contains(.gost) || showing(.gost, .gost)
         return demand
     }
 

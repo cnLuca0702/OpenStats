@@ -256,6 +256,7 @@ public struct MetricsSnapshot: Sendable {
     public var power: PowerReading?
     public var diskActivity: DiskActivity?
     public var diskHealth: DiskHealth?
+    public var gost: GostStatus?
 
     public init() {}
 }

@@ -4,7 +4,7 @@ import Metrics
 import Observation
 
 public enum MenuBarItem: String, CaseIterable, Identifiable, Sendable {
-    case cpu, memory, network, gpu, disk, temperature, fan, battery
+    case cpu, memory, network, gpu, disk, temperature, fan, battery, gost
 
     public var id: String { rawValue }
 
@@ -18,6 +18,7 @@ public enum MenuBarItem: String, CaseIterable, Identifiable, Sendable {
         case .temperature: tr("CPU 温度")
         case .fan: tr("风扇转速")
         case .battery: tr("电池")
+        case .gost: tr("Gost 代理")
         }
     }
 
@@ -31,6 +32,7 @@ public enum MenuBarItem: String, CaseIterable, Identifiable, Sendable {
         case .temperature: tr("CPU 核心最高温度")
         case .fan: tr("转速最高的风扇")
         case .battery: tr("电量与充电状态；没有电池的 Mac 显示蓝牙设备电量")
+        case .gost: tr("本机 gost 代理进程与端口状态，经代理探测线路延迟")
         }
     }
 
@@ -45,6 +47,7 @@ public enum MenuBarItem: String, CaseIterable, Identifiable, Sendable {
         case .temperature: "TMP"
         case .fan: "FAN"
         case .battery: "BAT"
+        case .gost: "GOST"
         }
     }
 
@@ -59,6 +62,7 @@ public enum MenuBarItem: String, CaseIterable, Identifiable, Sendable {
         case .temperature: tr("温度")
         case .fan: tr("风扇")
         case .battery: tr("电池")
+        case .gost: tr("Gost 代理")
         }
     }
 
@@ -73,6 +77,7 @@ public enum MenuBarItem: String, CaseIterable, Identifiable, Sendable {
         case .temperature: [.thermalSensors, .thermalFans, .thermalPower]
         case .fan: [.thermalFans, .thermalSensors, .thermalPower]
         case .battery: [.batteryHistory, .batteryHealth, .batteryBluetooth]
+        case .gost: [.gostPorts, .gostProcesses]
         }
     }
 
@@ -86,6 +91,7 @@ public enum MenuBarItem: String, CaseIterable, Identifiable, Sendable {
         case .temperature: "thermometer.medium"
         case .fan: "fan"
         case .battery: "battery.75"
+        case .gost: "point.3.connected.trianglepath"
         }
     }
 }
@@ -99,6 +105,7 @@ public enum PopoverSection: String, CaseIterable, Identifiable, Sendable {
     case diskActivity, diskHealth, diskProcesses
     case thermalSensors, thermalFans, thermalPower
     case batteryHistory, batteryHealth, batteryBluetooth
+    case gostPorts, gostProcesses
 
     public var id: String { rawValue }
 
@@ -140,6 +147,8 @@ public enum PopoverSection: String, CaseIterable, Identifiable, Sendable {
         case .batteryHistory: tr("电量历史")
         case .batteryHealth: tr("电池健康")
         case .batteryBluetooth: tr("蓝牙设备")
+        case .gostPorts: tr("端口与线路")
+        case .gostProcesses: tr("进程")
         }
     }
 }
@@ -198,10 +207,10 @@ public enum MenuBarStyle: String, CaseIterable, Identifiable, Sendable {
 
     public var id: String { rawValue }
 
-    /// 温度、风扇没有百分比，图形类风格画不出来，只给文字类的三种
+    /// 温度、风扇、Gost 没有百分比，图形类风格画不出来，只给文字类的几种
     static func options(for item: MenuBarItem) -> [MenuBarStyle] {
         switch item {
-        case .temperature, .fan: [.stacked, .stackedCenter, .inline, .icon]
+        case .temperature, .fan, .gost: [.stacked, .stackedCenter, .inline, .icon]
         default: allCases
         }
     }
@@ -280,12 +289,12 @@ public enum AppearanceMode: String, CaseIterable, Identifiable, Sendable {
 
 /// 主窗口侧边栏的页面
 public enum PanelTab: String, CaseIterable, Identifiable, Sendable {
-    case overview, system, history, cpu, gpu, memory, disk, network, thermal, battery, processes, keepAwake, cleaner, uninstaller, startupItems
+    case overview, system, history, cpu, gpu, memory, disk, network, thermal, battery, gost, processes, keepAwake, cleaner, uninstaller, startupItems
     case settingsGeneral, settingsMenuBar, settingsNotifications, settingsAccount, settingsHelper, settingsAbout
 
     public var id: String { rawValue }
 
-    static let monitors: [PanelTab] = [.overview, .system, .history, .cpu, .gpu, .memory, .disk, .network, .thermal, .battery]
+    static let monitors: [PanelTab] = [.overview, .system, .history, .cpu, .gpu, .memory, .disk, .network, .thermal, .battery, .gost]
     static let tools: [PanelTab] = [.processes, .startupItems, .keepAwake, .cleaner, .uninstaller]
     static let settings: [PanelTab] = [.settingsGeneral, .settingsMenuBar, .settingsNotifications, .settingsAccount, .settingsHelper, .settingsAbout]
 
@@ -306,6 +315,7 @@ public enum PanelTab: String, CaseIterable, Identifiable, Sendable {
         case .network: tr("网络")
         case .thermal: tr("温度与风扇")
         case .battery: tr("电池")
+        case .gost: tr("Gost 代理")
         case .processes: tr("进程")
         case .keepAwake: tr("防休眠")
         case .cleaner: tr("清理")
@@ -332,6 +342,7 @@ public enum PanelTab: String, CaseIterable, Identifiable, Sendable {
         case .network: "network"
         case .thermal: "fan"
         case .battery: "battery.75"
+        case .gost: "point.3.connected.trianglepath"
         case .processes: "list.bullet.rectangle"
         case .keepAwake: "cup.and.saucer"
         case .cleaner: "sparkles"
@@ -356,6 +367,7 @@ public enum PanelTab: String, CaseIterable, Identifiable, Sendable {
         case .disk: .disk
         case .thermal: .temperature
         case .battery: .battery
+        case .gost: .gost
         default: nil
         }
     }
@@ -377,6 +389,7 @@ public enum PanelTab: String, CaseIterable, Identifiable, Sendable {
         case .disk: self = .disk
         case .temperature, .fan: self = .thermal
         case .battery: self = .battery
+        case .gost: self = .gost
         }
     }
 }
