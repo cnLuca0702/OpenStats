@@ -1,12 +1,122 @@
 import Foundation
+import Localization
 
 /// 监控大屏页面：一个自包含的 HTML 文件（无外部依赖），由 DashboardServer 直接下发。
 /// 每 2 秒拉一次 /metrics；断网时保留最后读数并持续重试。
 /// 布局自适应三种形态：横屏（≥4:3）、竖屏平板（宽≥1000px）、窄屏手机
 enum DashboardPage {
-    static let html = Data(#"""
+    /// 按当前界面语言生成页面：中文原样下发，英文时把页面用到的译文表嵌进去，由页面脚本的 t() 套用
+    static func localizedHTML() -> Data {
+        let table = L10n.isEnglish ? translationTable() : [:]
+        let json = (try? JSONSerialization.data(withJSONObject: table, options: [.sortedKeys]))
+            .map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+        let page = template
+            .replacingOccurrences(of: "__LANG__", with: L10n.isEnglish ? "en" : "zh-CN")
+            .replacingOccurrences(of: "__L10N__", with: json)
+        return Data(page.utf8)
+    }
+
+    /// 中文原文 → 译文。带 {} 的原文不能直接交给 tr（会把 {} 当作插入的内容），
+    /// 先把每个 {} 换成占位记号再翻译，译文里的记号换回 {1}、{2}，英文调整语序时也不会错位
+    static func translationTable() -> [String: String] {
+        var table: [String: String] = [:]
+        for phrase in phrases {
+            let parts = phrase.components(separatedBy: "{}")
+            var probe = parts[0]
+            for index in 1..<parts.count {
+                probe += marker(index) + parts[index]
+            }
+            var translated = tr(probe)
+            guard translated != probe else { continue }
+            for index in 1..<parts.count {
+                translated = translated.replacingOccurrences(of: marker(index), with: "{\(index)}")
+            }
+            table[phrase] = translated
+        }
+        return table
+    }
+
+    /// 私用区字符包住序号：不算中文，翻译时原样保留
+    private static func marker(_ index: Int) -> String {
+        "\u{E000}\(index)\u{E001}"
+    }
+
+    /// 页面里所有要翻译的中文：静态文字、aria-label、标题，以及脚本里 t('…') 的原文。
+    /// 写成多行原始字符串，免得 Scripts/l10n_wrap.py 把它们包进 tr(...)
+    static let phrases: [String] = #"""
+主机监控
+等待首次采样
+连接中…
+已运行 —
+使用率 · 0–100%
+负载 —
+各逻辑核心使用率
+CPU近5分钟使用率走势
+5分钟前
+现在
+内存
+交换 —
+内存近5分钟使用率走势
+网络
+物理接口流量 · 近5分钟
+↓ 下载
+下载速率走势
+↑ 上传
+上传速率走势
+上下行共用刻度
+峰值 —
+Gost 线路
+代理出口连通性 · 延迟走势
+查找中…
+等待进程及端口发现
+系统
+当前状态
+磁盘
+负载
+电池
+进程
+进程 TOP
+按CPU排序 · 单核口径
+OpenStats 监控大屏 · 系统2秒 / 线路约10秒刷新
+等待数据
+已运行 {}天 {}小时
+已运行 {}小时 {}分
+已运行 {}分
+实时 · 每2秒刷新
+连接失败 · 正在重试…
+连接中断 · 正在重试 · 保留上次读数
+采样已过期 · 保留上次读数
+采样于 {}秒前
+所有接口
+已过期
+不通
+探测中
+等待探测
+{}秒前
+端口{}延迟走势，断线处留空
+峰值 {}
+采样 {}
+负载 {}
+核心{}：{}%
+交换 {}%
+端口可用
+无监听端口
+未运行
+最快 {} ms
+暂无可用线路
+{}个进程
+PID {}（{}% · {} MB）
+本机没有名为 gost 的进程
+没有可监控的监听端口
+{} / {} GB（{}%）
+—（台式机）
+CPU前{}项见进程表
+暂无进程数据
+"""#.components(separatedBy: "\n")
+
+    static let template = #"""
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="__LANG__">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -42,27 +152,30 @@ h2{margin:0 0 8px;font-size:var(--font);line-height:1.3;font-weight:650;letter-s
 <footer><span>OpenStats 监控大屏 · 系统2秒 / 线路约10秒刷新</span><span><span id="viewportSize"></span> · <span id="freshness">等待数据</span></span></footer>
 <script>
 'use strict';
+const L=__L10N__,LOCALE=document.documentElement.lang;
+function t(s,...a){let r=L[s]||s,i=0;a.forEach((v,n)=>{r=r.split('{'+(n+1)+'}').join(String(v));});return r.replace(/\{\}/g,()=>String(a[i++]));}
+function translateStatic(){const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);for(let n=w.nextNode();n;n=w.nextNode()){const k=n.nodeValue.trim();if(L[k])n.nodeValue=n.nodeValue.replace(k,L[k]);}document.querySelectorAll('[aria-label]').forEach(e=>{const k=e.getAttribute('aria-label');if(L[k])e.setAttribute('aria-label',L[k]);});if(L[document.title])document.title=L[document.title];}
 const $=id=>document.getElementById(id);
 let lastData=null,lastOkAt=0,lastSampleStamp=null,lastSampleSeenAt=0,sampleBaseAge=0,fetchFailed=false;
 const escapeHTML=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function byteParts(n){n=Number.isFinite(n)?Math.max(0,n):0;for(const item of [[2**30,'GB'],[2**20,'MB'],[2**10,'KB']]){if(n>=item[0])return[(n/item[0]).toFixed(item[0]===2**10?0:1),item[1]];}return[Math.round(n)+'','B'];}
 function fmtBytes(n){const p=byteParts(n);return p[0]+' '+p[1];}
-function fmtUptime(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d>0?`${d}天 ${h}小时`:(h>0?`${h}小时 ${m}分`:`${m}分`);}
+function fmtUptime(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d>0?t('已运行 {}天 {}小时',d,h):(h>0?t('已运行 {}小时 {}分',h,m):t('已运行 {}分',m));}
 function msColor(ms){return ms<300?'green':ms<800?'amber':'red';}
 function updateStatus(){
  $('viewportSize').textContent=innerWidth+'×'+innerHeight;
- const now=Date.now();$('clock').textContent=new Date(now).toLocaleTimeString('zh-CN',{hour12:false});
+ const now=Date.now();$('clock').textContent=new Date(now).toLocaleTimeString(LOCALE,{hour12:false});
  const age=lastSampleSeenAt?Math.max(0,sampleBaseAge+(now-lastSampleSeenAt)/1000):null;
  const disconnected=fetchFailed||(lastOkAt&&now-lastOkAt>6500);
  const stale=age!==null&&age>8;
- let text='实时 · 每2秒刷新',state='live';
- if(!lastOkAt){text=fetchFailed?'连接失败 · 正在重试…':'连接中…';state=fetchFailed?'offline':'waiting';}
- else if(disconnected){text='连接中断 · 正在重试 · 保留上次读数';state='offline';}
- else if(stale){text='采样已过期 · 保留上次读数';state='stale';}
+ let text=t('实时 · 每2秒刷新'),state='live';
+ if(!lastOkAt){text=fetchFailed?t('连接失败 · 正在重试…'):t('连接中…');state=fetchFailed?'offline':'waiting';}
+ else if(disconnected){text=t('连接中断 · 正在重试 · 保留上次读数');state='offline';}
+ else if(stale){text=t('采样已过期 · 保留上次读数');state='stale';}
  $('stale').textContent=text;$('stale').className='connection'+(state==='offline'?' off':state==='live'?'':' warn');
  $('dot').className='dot'+(state==='offline'?' off':state==='live'?'':' warn');
  document.body.dataset.connection=state;
- $('freshness').textContent=age===null?'等待数据':`采样于 ${Math.floor(age)}秒前`;
+ $('freshness').textContent=age===null?t('等待数据'):t('采样于 {}秒前',Math.floor(age));
  document.body.dataset.sampleAge=age===null?'':age.toFixed(1);
 }
 function spark(canvas,values,color,opts={}){
@@ -78,10 +191,10 @@ function spark(canvas,values,color,opts={}){
 function portKey(p){return 'tile-'+String(p.address+'-'+p.port).replace(/[^a-zA-Z0-9-]/g,'_');}
 function tileHTML(p,serverTime){
  const age=p.probedAt?Math.max(0,serverTime-p.probedAt):null,old=age!==null&&age>60;
- const address=p.address==='0.0.0.0'?'所有接口':p.address;
- const value=old?'已过期':p.state==='ok'?`${Math.round(p.ms)}<span class="unit">ms</span>`:p.state==='failed'?'不通':'探测中';
+ const address=p.address==='0.0.0.0'?t('所有接口'):p.address;
+ const value=old?t('已过期'):p.state==='ok'?`${Math.round(p.ms)}<span class="unit">ms</span>`:p.state==='failed'?t('不通'):t('探测中');
  const color=old?'amber':p.state==='ok'?msColor(p.ms):p.state==='failed'?'red':'muted';
- return `<div class="tile"><div class="tile-name"><span class="badge">${escapeHTML(p.kind||'—')}</span><span class="address">${escapeHTML(address)}:${escapeHTML(p.port)}</span></div><div class="tile-result"><span class="ms ${color}">${value}</span><span class="probe-age">${age===null?'等待探测':Math.floor(age)+'秒前'}</span></div><canvas id="${portKey(p)}" role="img" aria-label="端口${escapeHTML(p.port)}延迟走势，断线处留空"></canvas></div>`;
+ return `<div class="tile"><div class="tile-name"><span class="badge">${escapeHTML(p.kind||'—')}</span><span class="address">${escapeHTML(address)}:${escapeHTML(p.port)}</span></div><div class="tile-result"><span class="ms ${color}">${value}</span><span class="probe-age">${age===null?t('等待探测'):t('{}秒前',Math.floor(age))}</span></div><canvas id="${portKey(p)}" role="img" aria-label="${escapeHTML(t('端口{}延迟走势，断线处留空',p.port))}"></canvas></div>`;
 }
 function rates(values,times,interval){return values.slice(1).map((v,i)=>{const dt=times&&times.length===values.length?times[i+1]-times[i]:interval;return dt>0?Math.max(0,v-values[i])/dt:0;});}
 function rateValue(id,value){const parts=byteParts(value);$(id).innerHTML=`<span class="rate-number">${parts[0]}</span><span class="unit">${parts[1]}/s</span>`;}
@@ -90,28 +203,28 @@ function drawCharts(payload){
  spark($('cpuSpark'),h.cpu,'#58c8fa',{max:100});spark($('memSpark'),h.mem,'#b49aff',{max:100});
  const down=rates(h.netDown,h.time,payload.sampleInterval||2),up=rates(h.netUp,h.time,payload.sampleInterval||2),peak=Math.max(...down,...up,1024);
  spark($('netDownSpark'),down,'#58c8fa',{max:peak});spark($('netUpSpark'),up,'#ffb080',{max:peak});
- $('netScale').textContent='峰值 '+fmtBytes(peak)+'/s';
+ $('netScale').textContent=t('峰值 {}',fmtBytes(peak)+'/s');
  if(down.length)rateValue('netDown',down[down.length-1]);if(up.length)rateValue('netUp',up[up.length-1]);
  g.ports.forEach(p=>{const canvas=$(portKey(p));if(canvas)spark(canvas,p.history,p.state==='ok'?'#61da95':'#ff8188',{fill:false});});
 }
 function render(payload){
  const s=payload.system,g=payload.gost;
  if(!s||!Number.isFinite(s.time)||!Array.isArray(s.cpuPercpu)||!Array.isArray(s.processes)||!payload.history||!g||!Array.isArray(g.ports))throw new Error('Incomplete metrics');
- $('host').textContent=s.hostname||'Mac';$('ip').textContent=location.hostname+' · 采样 '+new Date(s.time*1000).toLocaleTimeString('zh-CN',{hour12:false});$('uptime').textContent='已运行 '+fmtUptime(s.uptimeSec);
- $('cpu').textContent=s.cpu.toFixed(0)+'%';$('loadavg').textContent='负载 '+s.load.join(' / ');
+ $('host').textContent=s.hostname||'Mac';$('ip').textContent=location.hostname+' · '+t('采样 {}',new Date(s.time*1000).toLocaleTimeString(LOCALE,{hour12:false}));$('uptime').textContent=fmtUptime(s.uptimeSec);
+ $('cpu').textContent=s.cpu.toFixed(0)+'%';$('loadavg').textContent=t('负载 {}',s.load.join(' / '));
  if($('cores').children.length!==s.cpuPercpu.length)$('cores').innerHTML=s.cpuPercpu.map(()=>'<div class="core"><i></i></div>').join('');
- s.cpuPercpu.forEach((v,i)=>{const el=$('cores').children[i];el.title=`核心${i+1}：${v}%`;el.setAttribute('aria-label',el.title);el.firstChild.style.width=Math.min(v,100)+'%';el.firstChild.style.background=v<50?'var(--cyan)':v<85?'var(--amber)':'var(--red)';});
- $('mem').textContent=s.memUsedGB.toFixed(1)+' GB';$('memPct').textContent=s.memPercent.toFixed(0)+'% / '+s.memTotalGB+' GB';$('swap').textContent='交换 '+s.swapPercent+'%';
+ s.cpuPercpu.forEach((v,i)=>{const el=$('cores').children[i];el.title=t('核心{}：{}%',i+1,v);el.setAttribute('aria-label',el.title);el.firstChild.style.width=Math.min(v,100)+'%';el.firstChild.style.background=v<50?'var(--cyan)':v<85?'var(--amber)':'var(--red)';});
+ $('mem').textContent=s.memUsedGB.toFixed(1)+' GB';$('memPct').textContent=s.memPercent.toFixed(0)+'% / '+s.memTotalGB+' GB';$('swap').textContent=t('交换 {}%',s.swapPercent);
  const healthy=g.upCount===g.totalPorts&&g.totalPorts>0;
- $('gostSummary').innerHTML=g.totalPorts?`<span class="${healthy?'green':g.upCount?'amber':'red'}">${g.upCount}/${g.totalPorts}</span><span class="unit">端口可用</span>`:g.running?'无监听端口':'未运行';
- $('gostBest').textContent=g.bestMs!=null?'最快 '+Math.round(g.bestMs)+' ms':'暂无可用线路';
- $('gostProc').textContent=g.processes.length?g.processes.length+'个进程 · '+g.processes.map(p=>`PID ${p.pid}（${p.cpu}% · ${p.memMB} MB）`).join(' · '):'本机没有名为 gost 的进程';
+ $('gostSummary').innerHTML=g.totalPorts?`<span class="${healthy?'green':g.upCount?'amber':'red'}">${g.upCount}/${g.totalPorts}</span><span class="unit">${t('端口可用')}</span>`:g.running?t('无监听端口'):t('未运行');
+ $('gostBest').textContent=g.bestMs!=null?t('最快 {} ms',Math.round(g.bestMs)):t('暂无可用线路');
+ $('gostProc').textContent=g.processes.length?t('{}个进程',g.processes.length)+' · '+g.processes.map(p=>t('PID {}（{}% · {} MB）',p.pid,p.cpu,p.memMB)).join(' · '):t('本机没有名为 gost 的进程');
  const serverTime=Number.isFinite(payload.serverTime)?payload.serverTime:s.time;
- $('tiles').innerHTML=g.ports.length?g.ports.map(p=>tileHTML(p,serverTime)).join(''):'<div class="empty">没有可监控的监听端口</div>';
+ $('tiles').innerHTML=g.ports.length?g.ports.map(p=>tileHTML(p,serverTime)).join(''):'<div class="empty">'+t('没有可监控的监听端口')+'</div>';
  const wide=matchMedia('(min-width:1000px) and (max-aspect-ratio:1/1)').matches;
  document.documentElement.style.setProperty('--gost-min',Math.max(wide?420:290,Math.ceil(g.ports.length/2)*(wide?115:85)+(wide?145:115))+'px');
- $('disk').textContent=`${s.diskUsedGB} / ${s.diskTotalGB} GB（${s.diskPercent}%）`;$('load2').textContent=s.load.join(' / ');$('battery').textContent=s.batteryPercent!=null?s.batteryPercent+'%':'—（台式机）';$('procs').textContent=s.processes.length?'CPU前'+s.processes.length+'项见进程表':'暂无进程数据';
- $('top').innerHTML=s.processes.length?s.processes.map(p=>`<div class="proc"><span class="name" title="${escapeHTML(p.name)} · PID ${p.pid}">${escapeHTML(p.name)}</span><span class="val cyan">${p.cpu}%</span><span class="val muted">${p.mem}%</span></div>`).join(''):'<div class="empty">暂无进程数据</div>';
+ $('disk').textContent=t('{} / {} GB（{}%）',s.diskUsedGB,s.diskTotalGB,s.diskPercent);$('load2').textContent=s.load.join(' / ');$('battery').textContent=s.batteryPercent!=null?s.batteryPercent+'%':t('—（台式机）');$('procs').textContent=s.processes.length?t('CPU前{}项见进程表',s.processes.length):t('暂无进程数据');
+ $('top').innerHTML=s.processes.length?s.processes.map(p=>`<div class="proc"><span class="name" title="${escapeHTML(p.name)} · PID ${p.pid}">${escapeHTML(p.name)}</span><span class="val cyan">${p.cpu}%</span><span class="val muted">${p.mem}%</span></div>`).join(''):'<div class="empty">'+t('暂无进程数据')+'</div>';
  const now=Date.now();if(s.time!==lastSampleStamp){lastSampleStamp=s.time;lastSampleSeenAt=now;sampleBaseAge=Math.max(0,serverTime-s.time);}
  lastData=payload;document.body.dataset.sampleTime=String(s.time);drawCharts(payload);
 }
@@ -120,9 +233,9 @@ async function poll(){
  try{const res=await fetch('/metrics',{cache:'no-store',signal:controller.signal});if(!res.ok)throw new Error(res.status);const payload=await res.json();render(payload);lastOkAt=Date.now();fetchFailed=false;}catch(e){fetchFailed=true;}finally{clearTimeout(timeout);updateStatus();setTimeout(poll,2000);}
 }
 let resizeFrame;addEventListener('resize',()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{if(lastData)render(lastData);});});
-updateStatus();setInterval(updateStatus,1000);poll();
+translateStatic();updateStatus();setInterval(updateStatus,1000);poll();
 </script>
 </body>
 </html>
-"""#.utf8)
+"""#
 }

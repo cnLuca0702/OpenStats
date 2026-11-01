@@ -4,19 +4,22 @@ import Network
 
 /// 监控大屏的 HTTP 服务：NWListener 上跑一个极简 HTTP/1.1，一连接一个请求（Connection: close）。
 /// 只服务三个只读端点（页面 / 指标 / 存活），不解析请求体；
-/// 页面与指标快照由 DashboardController 提前备好，这里只负责收发。
+/// 页面按当前界面语言现生成，指标快照由 DashboardController 提前备好，这里只负责收发。
 /// 监听是否成功不通过回调通知（避免跨线程闭包），控制器在采样循环里读 currentState 轮询
 final class DashboardServer: @unchecked Sendable {
     private let lock = NSLock()
     private var listener: NWListener?
     private var ready = false
     private var failureReason: String?
-    private let html: Data
+    /// 页面内容；每次请求现取，切换界面语言后刷新即生效
+    private let pageProvider: @Sendable () -> Data
     /// 最新的 /metrics 内容，由控制器的采样循环更新
     private let metricsProvider: @Sendable () -> Data
+    /// 一次连接最长保留时间：迟迟不发完请求头的连接到点就断开
+    static let connectionTimeout: TimeInterval = 10
 
-    init(html: Data, metricsProvider: @escaping @Sendable () -> Data) {
-        self.html = html
+    init(page: @escaping @Sendable () -> Data, metricsProvider: @escaping @Sendable () -> Data) {
+        self.pageProvider = page
         self.metricsProvider = metricsProvider
     }
 
@@ -39,13 +42,13 @@ final class DashboardServer: @unchecked Sendable {
         self.listener = listener
         lock.unlock()
 
-        listener.stateUpdateHandler = { [weak self] state in
-            guard let self else { return }
+        listener.stateUpdateHandler = { [weak self, weak listener] state in
+            guard let self, let listener else { return }
             switch state {
             case .ready:
-                self.noteState(ready: true, reason: nil)
+                self.noteState(of: listener, ready: true, reason: nil)
             case .failed(let error):
-                self.noteState(ready: false, reason: error.localizedDescription)
+                self.noteState(of: listener, ready: false, reason: error.localizedDescription)
             default:
                 break
             }
@@ -75,8 +78,13 @@ final class DashboardServer: @unchecked Sendable {
         return nil   // 还在启动中
     }
 
-    private func noteState(ready: Bool, reason: String?) {
+    /// 换端口后旧监听器迟到的回调不能覆盖新监听器的状态
+    private func noteState(of source: NWListener, ready: Bool, reason: String?) {
         lock.lock()
+        guard source === listener else {
+            lock.unlock()
+            return
+        }
         self.ready = ready
         self.failureReason = reason
         lock.unlock()
@@ -86,6 +94,10 @@ final class DashboardServer: @unchecked Sendable {
 
     private func serve(_ connection: NWConnection) {
         connection.start(queue: .global())
+        // 已经正常关闭的连接再 cancel 一次没有影响
+        DispatchQueue.global().asyncAfter(deadline: .now() + Self.connectionTimeout) {
+            connection.cancel()
+        }
         receiveRequest(connection, buffered: Data())
     }
 
@@ -105,7 +117,7 @@ final class DashboardServer: @unchecked Sendable {
             let requestLine = String(decoding: buffer.prefix(8192), as: UTF8.self)
                 .split(separator: "\r\n", maxSplits: 1).first.map(String.init)
             let path = requestLine?.split(separator: " ").dropFirst().first.map(String.init)
-            let response = Self.makeResponse(path: path, html: self.html, metrics: self.metricsProvider())
+            let response = Self.makeResponse(path: path, html: self.pageProvider(), metrics: self.metricsProvider())
             connection.send(content: response.data, contentContext: .defaultMessage, isComplete: true,
                             completion: .contentProcessed { _ in connection.cancel() })
         }
@@ -132,14 +144,14 @@ struct HTTPResponse {
 }
 
 extension DashboardServer {
-    /// 纯函数：按路径生成响应，便于单测
-    static func makeResponse(path: String?, html: Data, metrics: Data) -> HTTPResponse {
+    /// 纯函数：按路径生成响应，便于单测；页面与指标只在命中对应路径时才生成
+    static func makeResponse(path: String?, html: @autoclosure () -> Data, metrics: @autoclosure () -> Data) -> HTTPResponse {
         let path = path?.split(separator: "?").first.map(String.init) ?? "/"
         switch path {
         case "/", "/index.html":
-            return HTTPResponse(status: 200, contentType: "text/html; charset=utf-8", body: html)
+            return HTTPResponse(status: 200, contentType: "text/html; charset=utf-8", body: html())
         case "/metrics":
-            return HTTPResponse(status: 200, contentType: "application/json; charset=utf-8", body: metrics)
+            return HTTPResponse(status: 200, contentType: "application/json; charset=utf-8", body: metrics())
         case "/healthz":
             return HTTPResponse(status: 200, contentType: "text/plain; charset=utf-8", body: Data("ok".utf8))
         default:

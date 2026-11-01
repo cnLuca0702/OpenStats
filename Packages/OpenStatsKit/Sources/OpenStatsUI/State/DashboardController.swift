@@ -3,6 +3,7 @@ import Foundation
 import Localization
 import Metrics
 import Observation
+import SystemConfiguration
 
 /// 线程间传递最新 /metrics 内容的小盒子
 final class DashboardPayloadBox: @unchecked Sendable {
@@ -59,7 +60,7 @@ public final class DashboardController {
     init(settings: AppSettings, store: MetricsStore) {
         self.settings = settings
         self.store = store
-        server = DashboardServer(html: DashboardPage.html) { [payloadBox] in payloadBox.value }
+        server = DashboardServer(page: { DashboardPage.localizedHTML() }) { [payloadBox] in payloadBox.value }
         if settings.dashboardEnabled {
             applySettings()
         }
@@ -67,14 +68,19 @@ public final class DashboardController {
 
     // MARK: 生命周期
 
-    /// 开关或端口变化后调用；幂等，当前配置已在跑则不动
+    /// 开关或端口变化后调用（含云同步套用的设置）；幂等，当前端口已在启动或运行则不动
     public func applySettings() {
         guard settings.dashboardEnabled else {
-            stop()
+            if availability != .off { stop() }
             return
         }
         let port = settings.dashboardPort
-        if case .running(let running) = availability, running == port { return }
+        switch availability {
+        case .starting(let current), .running(let current):
+            if current == port { return }
+        case .off, .failed:
+            break
+        }
         availability = .starting(port: port)
         server.start(port: UInt16(clamping: port))
         if sampler == nil {
@@ -140,7 +146,7 @@ public final class DashboardController {
 
         var system: [String: Any] = [
             "time": sample.time,
-            "hostname": Host.current().localizedName ?? ProcessInfo.processInfo.hostName,
+            "hostname": Self.hostname,
             "cpu": sample.cpu,
             "cpuPercpu": (cpu?.perCore ?? []).map { ($0 * 100).rounded(.toNearestOrAwayFromZero) },
             "load": (cpu?.loadAverage ?? [0, 0, 0]).map { ($0 * 100).rounded() / 100 },
@@ -177,8 +183,32 @@ public final class DashboardController {
             "sampleInterval": Self.sampleInterval,
             "serverTime": Date().timeIntervalSince1970,
         ]
-        return (try? JSONSerialization.data(withJSONObject: payload)) ?? Data("{}".utf8)
+        // NaN / 无穷大会让 JSONSerialization 抛 Objective-C 异常直接崩溃，先换成 null
+        let safe = Self.jsonSafe(payload)
+        guard JSONSerialization.isValidJSONObject(safe) else { return Data("{}".utf8) }
+        return (try? JSONSerialization.data(withJSONObject: safe)) ?? Data("{}".utf8)
     }
+
+    /// 递归把非有限的浮点数换成 NSNull，其余值原样保留
+    nonisolated static func jsonSafe(_ value: Any) -> Any {
+        switch value {
+        case let dictionary as [String: Any]:
+            return dictionary.mapValues(jsonSafe)
+        case let array as [Any]:
+            return array.map(jsonSafe)
+        case let number as Double where !number.isFinite:
+            return NSNull()
+        default:
+            return value
+        }
+    }
+
+    /// 电脑名称（“系统设置 › 通用 › 共享”里那个）。读 SystemConfiguration 的本地缓存，
+    /// 不像 Host.current() 那样可能做 DNS 反查卡住主线程；只取一次，改名后重启生效
+    private static let hostname: String = {
+        if let name = SCDynamicStoreCopyComputerName(nil, nil).map({ $0 as String }), !name.isEmpty { return name }
+        return ProcessInfo.processInfo.hostName
+    }()
 
     /// CPU 前六名；CPU 口径与活动监视器一致（单核满载为 100%）
     private func topProcesses() -> [[String: Any]] {

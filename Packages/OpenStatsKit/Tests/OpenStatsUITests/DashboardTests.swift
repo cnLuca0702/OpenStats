@@ -129,4 +129,28 @@ import Testing
         #expect((payload["system"] as? [String: Any])?["cpu"] as? Double == 0)
         #expect((payload["gost"] as? [String: Any])?["running"] as? Bool == false)
     }
+
+    @Test func payloadReplacesNonFiniteNumbersWithNull() throws {
+        // NaN 直接交给 JSONSerialization 会抛 Objective-C 异常
+        let safe = DashboardController.jsonSafe(["a": Double.nan, "b": [1.5, Double.infinity], "c": 3, "d": "x"] as [String: Any])
+        #expect(JSONSerialization.isValidJSONObject(safe))
+        let data = try JSONSerialization.data(withJSONObject: safe)
+        let decoded = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(decoded["a"] is NSNull)
+        #expect((decoded["b"] as? [Any])?.first as? Double == 1.5)
+        #expect((decoded["b"] as? [Any])?.last is NSNull)
+        #expect(decoded["c"] as? Int == 3)
+        #expect(decoded["d"] as? String == "x")
+    }
+
+    // MARK: 页面
+
+    @Test func pageFillsLanguageAndTranslationTable() {
+        // 测试进程保持中文：页面原样下发，译文表为空
+        let page = String(decoding: DashboardPage.localizedHTML(), as: UTF8.self)
+        #expect(page.contains(#"<html lang="zh-CN">"#))
+        #expect(page.contains("const L={},"))
+        #expect(!page.contains("__LANG__") && !page.contains("__L10N__"))
+        #expect(!DashboardPage.phrases.isEmpty && !DashboardPage.phrases.contains(""))
+    }
 }

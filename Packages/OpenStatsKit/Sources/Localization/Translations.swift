@@ -1251,5 +1251,62 @@ Gost 正在查找端口…	Gost is looking for ports…
 未开启	Off
 服务运行中 · 端口 {}	Running · port {}
 端口 {} 启动失败	Failed to start on port {}
+主机监控	Host Monitor
+等待首次采样	Waiting for the first sample
+连接中…	Connecting…
+已运行 —	Up —
+使用率 · 0–100%	Usage · 0–100%
+负载 —	Load —
+各逻辑核心使用率	Usage of each logical core
+CPU近5分钟使用率走势	CPU usage over the last 5 minutes
+5分钟前	5 min ago
+交换 —	Swap —
+内存近5分钟使用率走势	Memory usage over the last 5 minutes
+物理接口流量 · 近5分钟	Physical interface traffic · last 5 min
+↓ 下载	↓ Download
+下载速率走势	Download rate trend
+↑ 上传	↑ Upload
+上传速率走势	Upload rate trend
+上下行共用刻度	Shared scale for both directions
+Gost 线路	Gost Routes
+代理出口连通性 · 延迟走势	Proxy reachability · latency trend
+查找中…	Searching…
+等待进程及端口发现	Waiting for processes and ports
+当前状态	Current status
+负载	Load
+进程 TOP	Top Processes
+按CPU排序 · 单核口径	Sorted by CPU · one full core = 100%
+OpenStats 监控大屏 · 系统2秒 / 线路约10秒刷新	OpenStats dashboard · system every 2 s / routes about every 10 s
+等待数据	Waiting for data
+已运行 {}天 {}小时	Up {}d {}h
+已运行 {}小时 {}分	Up {}h {}m
+已运行 {}分	Up {}m
+实时 · 每2秒刷新	Live · refreshes every 2 s
+连接失败 · 正在重试…	Connection failed · retrying…
+连接中断 · 正在重试 · 保留上次读数	Connection lost · retrying · showing last readings
+采样已过期 · 保留上次读数	Sample is stale · showing last readings
+采样于 {}秒前	Sampled {}s ago
+已过期	Stale
+探测中	Probing
+等待探测	Waiting to probe
+{}秒前	{}s ago
+端口{}延迟走势，断线处留空	Port {} latency trend; gaps mark outages
+采样 {}	sampled {}
+负载 {}	Load {}
+核心{}：{}%	Core {}: {}%
+交换 {}%	Swap {}%
+端口可用	ports up
+无监听端口	No listening ports
+最快 {} ms	Fastest {} ms
+暂无可用线路	No route available
+{}个进程	Processes: {}
+PID {}（{}% · {} MB）	PID {} ({}% · {} MB)
+本机没有名为 gost 的进程	No process named gost on this Mac
+没有可监控的监听端口	No listening ports to monitor
+{} / {} GB（{}%）	{} / {} GB ({}%)
+—（台式机）	— (desktop)
+CPU前{}项见进程表	Top {} by CPU are in the process table
+暂无进程数据	No process data yet
+正在启动 · 端口 {}	Starting · port {}
 """#
 }

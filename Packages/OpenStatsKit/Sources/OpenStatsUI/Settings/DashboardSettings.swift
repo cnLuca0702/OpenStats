@@ -11,21 +11,12 @@ struct DashboardSettings: View {
         SettingsGroup {
             GroupRow(showsDivider: false) {
                 SettingRow(title: tr("启用监控大屏"), subtitle: tr("同一局域网里的设备（平板、旧电脑、电视的浏览器）打开下面的地址，即可实时查看本机监控，适合挂一块监控屏")) {
-                    DSToggle(isOn: Binding(get: { settings.dashboardEnabled },
-                                           set: {
-                                               settings.dashboardEnabled = $0
-                                               model.dashboard.applySettings()
-                                           }),
-                             label: tr("启用监控大屏"))
+                    DSToggle(isOn: $settings.dashboardEnabled, label: tr("启用监控大屏"))
                 }
             }
             GroupRow {
                 SettingRow(title: tr("端口")) {
-                    SegmentedControl(selection: Binding(get: { settings.dashboardPort },
-                                                        set: {
-                                                            settings.dashboardPort = $0
-                                                            model.dashboard.applySettings()
-                                                        }),
+                    SegmentedControl(selection: $settings.dashboardPort,
                                      options: AppSettings.dashboardPortOptions.map { ($0, "\($0)") })
                         .frame(width: DS.Size.sidebarWidth)
                 }
@@ -43,7 +34,12 @@ struct DashboardSettings: View {
                 Text(tr("未开启"))
                     .foregroundStyle(DS.Palette.textSecondary)
             }
-        case .starting(let port), .running(let port):
+        case .starting(let port):
+            SettingRow(title: tr("状态")) {
+                Text(tr("正在启动 · 端口 \(port)"))
+                    .foregroundStyle(DS.Palette.textSecondary)
+            }
+        case .running(let port):
             SettingRow(title: tr("状态")) {
                 VStack(alignment: .trailing, spacing: DS.Space.s1) {
                     Text(tr("服务运行中 · 端口 \(port)"))

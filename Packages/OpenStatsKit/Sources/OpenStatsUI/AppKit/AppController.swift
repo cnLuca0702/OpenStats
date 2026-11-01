@@ -226,11 +226,15 @@ public final class AppController: NSObject, NSApplicationDelegate {
             _ = model.settings.probeInBackground
             _ = model.settings.enabledAlerts
             _ = model.settings.language
+            _ = model.settings.dashboardEnabled
+            _ = model.settings.dashboardPort
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
                 self.applyLanguageIfChanged()
                 self.model.alerts.applySettings()
+                // 设置页与云同步改动都走这里，监控大屏随之启停或换端口
+                self.model.dashboard.applySettings()
                 await self.model.hub.update(self.model.demand)
                 self.model.bluetooth.setDemand(self.model.bluetoothDemand)
                 self.applyAppearance()
