@@ -23,7 +23,7 @@ import Testing
         let stored = defaults()
         stored.set(["gpu", "unknown", "gpu", "cpu"], forKey: "menuBarOrder")
         let settings = AppSettings(defaults: stored)
-        #expect(settings.menuBarOrder == [.gpu, .cpu, .memory, .network, .disk, .temperature, .fan, .battery])
+        #expect(settings.menuBarOrder == [.gpu, .cpu, .memory, .network, .disk, .temperature, .fan, .battery, .gost])
         #expect(Set(settings.menuBarOrder) == Set(MenuBarItem.allCases))
     }
 
@@ -59,7 +59,7 @@ import Testing
     @Test func movesSwapNeighborsAndStopAtTheEdges() {
         let settings = AppSettings(defaults: defaults())
         settings.moveMenuBarItem(.cpu, by: -1)
-        settings.moveMenuBarItem(.battery, by: 1)
+        settings.moveMenuBarItem(.gost, by: 1)
         #expect(settings.menuBarOrder == MenuBarItem.allCases)
         settings.moveMenuBarItem(.memory, by: -1)
         #expect(Array(settings.menuBarOrder.prefix(3)) == [.memory, .cpu, .network])
@@ -95,7 +95,7 @@ import Testing
         var document = SettingsDocument()
         document.menuBarOrder = ["fan", "future", "fan", "cpu"]
         settings.apply(document)
-        #expect(settings.menuBarOrder == [.fan, .cpu, .memory, .network, .gpu, .disk, .temperature, .battery])
+        #expect(settings.menuBarOrder == [.fan, .cpu, .memory, .network, .gpu, .disk, .temperature, .battery, .gost])
     }
 
     @Test func orderChangesInvalidateTheMenuBarObservation() async {

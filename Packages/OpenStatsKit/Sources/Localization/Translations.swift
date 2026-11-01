@@ -1217,5 +1217,30 @@ macOS 报告的热状态：偏高及以上时，系统会降低性能来降温	T
 ，充电中	, charging
 ，已从程序坞移除	, removed from the Dock
 ：{}	: {}
+Gost 代理	Gost proxy
+本机 gost 代理进程与端口状态，经代理探测线路延迟	Local gost proxy processes and ports, with route latency probed through the proxy
+端口与线路	Ports and routes
+端口来自本机 gost 进程的监听列表；“延迟”是把请求经该代理转发到 Cloudflare 再回来的完整往返时间（HTTP 与 SOCKS5 自动识别），连不上或超时记为不通	Ports come from the local gost processes' listening sockets. Latency is the full round trip of a request forwarded to Cloudflare through the proxy (HTTP and SOCKS5 are auto-detected); unreachable or timed out counts as down
+约每 10 秒探测	Probed about every 10 seconds
+没有名为 gost 的进程	No process named gost
+正在查找监听端口…	Looking for listening ports…
+正在查找监听端口	Looking for listening ports
+所有接口	All interfaces
+不通	Down
+{} · {} ms	{} · {} ms
+探测中…	Probing…
+本机所有名为 gost 的进程；CPU 与内存和活动监视器同一口径	All local processes named gost; CPU and memory match Activity Monitor
+运行时长	Uptime
+未运行	Not running
+查找中	Searching
+监控本机名为 gost 的代理进程	Monitors local proxy processes named gost
+最快延迟 {} ms	Fastest latency {} ms
+端口均不可用	All ports down
+经代理访问 Cloudflare 的往返时间，取最快的端口	Round trip to Cloudflare through the proxy; the fastest port is shown
+Gost 未运行	Gost not running
+Gost {}/{} 个端口可用	Gost {}/{} ports up
+ · 延迟 {} ms	 · latency {} ms
+Gost 正在查找端口…	Gost is looking for ports…
+{} ms	{} ms
 """#
 }

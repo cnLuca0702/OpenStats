@@ -20,6 +20,8 @@ public struct MetricsDemand: Sendable, Equatable {
     public var cpuFrequency = false
     /// 磁盘读写速率与 SMART 健康信息
     public var diskDetail = false
+    /// 本机 gost 代理进程与端口
+    public var gost = false
 
     public init() {}
 }
@@ -32,6 +34,7 @@ public actor MetricsHub {
     private let sensors = SensorSampler()
     private let power = PowerSampler()
     private var diskActivity = DiskActivitySampler()
+    private let gost = GostSampler()
 
     private var demand = MetricsDemand()
     private var handler: (@MainActor @Sendable (MetricsSnapshot) -> Void)?
@@ -105,6 +108,7 @@ public actor MetricsHub {
         demand.power = true
         demand.cpuFrequency = true
         demand.diskDetail = true
+        demand.gost = true
         return demand
     }
 
@@ -119,14 +123,14 @@ public actor MetricsHub {
 
     private func run() async {
         while !Task.isCancelled {
-            let snapshot = collect()
+            let snapshot = await collect()
             if let handler { await handler(snapshot) }
             // 容差让系统合并定时器唤醒，降低功耗
             try? await Task.sleep(for: demand.interval, tolerance: demand.interval / 4)
         }
     }
 
-    private func collect() -> MetricsSnapshot {
+    private func collect() async -> MetricsSnapshot {
         let now = Date()
         var snapshot = MetricsSnapshot()
         let demand = primed ? self.demand : Self.everything(interval: self.demand.interval)
@@ -168,6 +172,9 @@ public actor MetricsHub {
         if demand.power || demand.cpuFrequency, now.timeIntervalSince(lastPower) >= 1.9 {
             snapshot.power = power.sample(gpu: demand.power, frequency: demand.cpuFrequency, now: now)
             lastPower = now
+        }
+        if demand.gost {
+            snapshot.gost = await gost.sample(now: now)
         }
         return snapshot
     }
